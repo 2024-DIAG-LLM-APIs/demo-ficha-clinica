@@ -1,9 +1,21 @@
 from openai import OpenAI
-client = OpenAI(api_key="sk-proj-66666666666666666666666666666666")
+from pydantic import BaseModel
+
+
+class Razon(BaseModel):
+    texto: str
+
+
+class BooleanResponse(BaseModel):
+    isValid: bool
+    razon: Razon
+
+
+client = OpenAI()
 
 data = input("Ingrese los datos del paciente: ")
 
-validacion = client.chat.completions.create(
+validacion = client.beta.chat.completions.parse(
     model="gpt-4o",
     messages=[
         {
@@ -34,18 +46,18 @@ validacion = client.chat.completions.create(
         },
     ],
     temperature=0,
-    max_tokens=20,
     top_p=1,
     frequency_penalty=0,
     presence_penalty=0,
-    response_format={
-        "type": "text"
-    }
+    response_format=BooleanResponse
 )
 
-print(validacion.choices[0].message.content)
+isValid = validacion.choices[0].message.parsed.isValid
+print(validacion.choices[0].message.parsed.razon.texto)
+print(isValid)
+
 print("Tokens: ", validacion.usage)
-if validacion.choices[0].message.content == "Sí.":
+if isValid:
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -56,7 +68,7 @@ if validacion.choices[0].message.content == "Sí.":
                         "type": "text",
                         "text": """
                         Eres un asistente especialista en escribir fichas clinicas. Debes utilizar solo la información entregada y no inventar antecedentes.
-                        La información a entregar sera: nombre del paciente, fecha de nacimiento, dirección; en antecedentes entregaremos enfermedades previas y alergias, 
+                        La información a entregar sera: nombre del paciente, fecha de nacimiento, dirección; en antecedentes entregaremos enfermedades previas y alergias,
                         Además se entregará los sintomas. Con esto debes proponer un tratamiento
 
 dentro de la ficha incluye el sexo segun el nombre
