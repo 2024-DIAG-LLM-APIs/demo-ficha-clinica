@@ -2,6 +2,24 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 
+class Paciente(BaseModel):
+    nombre: str
+    fecha_nacimiento: str
+    direccion: str
+    sintomas: str
+
+
+class Antecedentes(BaseModel):
+    enfermedades_previas: str
+    alergias: str
+
+
+class Atencion(BaseModel):
+    sintomas: str
+    paciente: Paciente
+    antecedentes: Antecedentes
+
+
 class Razon(BaseModel):
     texto: str
 
@@ -9,54 +27,74 @@ class Razon(BaseModel):
 class BooleanResponse(BaseModel):
     isValid: bool
     razon: Razon
+    atencion: Atencion
 
 
 client = OpenAI()
 
-data = input("Ingrese los datos del paciente: ")
+isValid = False
+current_data = False
+info = None
+while not isValid:
+    data = input("Ingrese los datos del paciente: ")
+    messages = []
+    messages.append({
+        "role": "system",
+        "content": [
+            {
+                "type": "text",
+                "text": """
+            Debes verificar que se proporcionen todos los siguientes parámetros: nombre del paciente, fecha de nacimiento, 
+            dirección, enfermedades previas, alergias, y síntomas.
 
-validacion = client.beta.chat.completions.parse(
-    model="gpt-4o",
-    messages=[
-        {
-          "role": "system",
-          "content": [
-              {
-                  "type": "text",
-                  "text": """
-                  Debes verificar que se proporcionen todos los siguientes parámetros: nombre del paciente, fecha de nacimiento, 
-                  dirección, enfermedades previas, alergias, y síntomas. Responde con "Sí" si todos los parámetros están presentes,
-                  o "No" si falta alguno de ellos.
-
-                  La información que se proporcione debe incluir solo lo previamente especificado 
-                  (nombre del paciente, fecha de nacimiento, dirección, enfermedades previas, alergias, y síntomas).
-                  Indicame que datos faltan.
-                  """
-              }
-          ]
-        },
-        {
-            "role": "user",
+            La información que se proporcione debe incluir solo lo previamente especificado 
+            (nombre del paciente, fecha de nacimiento, dirección, enfermedades previas, alergias, y síntomas).
+            Indicame que datos faltan.
+            
+            Extrae toda la información y agregala a los datos actuales del paciente.
+            """
+            }
+        ]
+    })
+    if current_data:
+        messages.append({
+            "role": "assistant",
             "content": [
                 {
                     "type": "text",
-                    "text": data
+                    "text": current_data
                 }
             ]
-        },
-    ],
-    temperature=0,
-    top_p=1,
-    frequency_penalty=0,
-    presence_penalty=0,
-    response_format=BooleanResponse
-)
+        })
+    messages.append({
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": data
+            }
+        ]
+    })
+    validacion = client.beta.chat.completions.parse(
+        model="gpt-4o",
+        messages=messages,
+        temperature=0,
+        top_p=1,
+        frequency_penalty=0,
+        presence_penalty=0,
+        response_format=BooleanResponse
+    )
 
-isValid = validacion.choices[0].message.parsed.isValid
-print(validacion.choices[0].message.parsed.razon.texto)
-print(isValid)
+    current_data = validacion.choices[0].message.content
+    info = validacion.choices[0].message.parsed
+    if info.atencion.paciente.nombre == "":
+        print("Falta el nombre del paciente")
+    isValid = validacion.choices[0].message.parsed.isValid
+    print(current_data)
+    print("Tokens: ", validacion.usage)
+    if not isValid:
+        print(validacion.choices[0].message.parsed.razon.texto)
 
-print("Tokens: ", validacion.usage)
 if isValid:
     response = client.chat.completions.create(
         model="gpt-4o",
